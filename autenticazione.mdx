@@ -1,0 +1,48 @@
+---
+title: "Autenticazione"
+description: "Ottenere e usare la chiave di accesso della STA"
+---
+
+## Ottenere la chiave
+
+La chiave di accesso viene rilasciata da Ebigen su richiesta della STA. È personale, legata alla STA e
+viene mostrata **una sola volta**: conservatela in modo sicuro, come una password.
+
+Se la chiave viene smarrita o compromessa, chiedete a Ebigen di revocarla e di rilasciarne una nuova.
+
+## Usare la chiave
+
+La chiave va inviata in ogni chiamata nell'header `Authorization`:
+
+```http
+Authorization: Bearer LA_VOSTRA_CHIAVE
+```
+
+## Verificare l'accesso
+
+La prima chiamata da fare è [Verifica accesso](/api-reference/account/verifica-accesso), che restituisce la STA collegata alla chiave
+e il saldo del borsellino:
+
+```bash
+curl https://areaprivata.ebigen.org/api/v1/me \
+  -H "Authorization: Bearer LA_VOSTRA_CHIAVE"
+```
+
+```json
+{
+  "sta": {
+    "id": 11,
+    "business_name": "STA Emilia Romagna",
+    "is_child": false,
+    "purse_balance": 1271
+  }
+}
+```
+
+## Risposte di errore
+
+| Codice | Significato |
+|---|---|
+| `401` | Chiave mancante o non valida |
+| `403` | Chiave valida ma accesso alle API non abilitato per la STA |
+| `429` | Superato il limite di **60 chiamate al minuto** |

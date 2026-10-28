@@ -1,0 +1,57 @@
+---
+title: "Flusso operativo"
+description: "Dal corso all'attestato, passo per passo"
+---
+
+<Steps>
+  <Step title="Creare il corso (una volta sola)">
+    Inviate il corso con [Crea corso](/api-reference/corsi/crea-corso), indicando il vostro codice in `external_id`
+    e almeno un allegato (es. il programma).
+
+    Il corso viene creato **in attesa**: Ebigen assegna il template attestato e lo abilita.
+    Controllate lo stato con [Elenco corsi](/api-reference/corsi/elenco-corsi): quando è `abilitato` si possono creare aule.
+  </Step>
+
+  <Step title="Creare i docenti (se servono)">
+    Per tutti i corsi tranne E-learning l'aula richiede almeno un docente **abilitato**.
+    Create i docenti nuovi con [Crea docente](/api-reference/docenti/crea-docente), allegando il CV:
+    Ebigen li verifica e li abilita. Lo stato è visibile in [Elenco docenti](/api-reference/docenti/elenco-docenti).
+  </Step>
+
+  <Step title="Creare l'aula">
+    Inviate con [Crea aula](/api-reference/aule/crea-aula) l'edizione del corso con date di inizio e fine, sede,
+    docenti abilitati (`teacher_ids`) e discenti.
+
+    - **Discenti**: riconosciuti dal codice fiscale. Se esistono già nella STA basta il codice fiscale e vengono
+      aggiunti così come sono; quelli nuovi vengono creati con i loro dati.
+    - **Aziende**: riconosciute dalla partita IVA. Se esistono già vengono collegate, altrimenti vengono create.
+
+    L'aula viene creata **in attesa di autorizzazione**. In seguito si possono modificare solo partecipanti e sedi,
+    con [Modifica aula](/api-reference/aule/modifica-aula).
+  </Step>
+
+  <Step title="Attendere l'autorizzazione">
+    Ebigen autorizza l'aula (o la respinge con una nota). Lo stato e la nota sono visibili in
+    [Dettaglio aula](/api-reference/aule/dettaglio-aula): `autorizzata` o `non_autorizzata`.
+  </Step>
+
+  <Step title="Fine corso">
+    Dal giorno dopo la data di fine corso segnalate la conclusione con
+    [Segnala fine corso](/api-reference/fine-corso/segnala-fine-corso), **allegando nella stessa chiamata** i documenti
+    (registri, firme, verbali). Se in seguito Ebigen chiede un documento mancante, aggiungetelo con
+    [Carica allegati](/api-reference/fine-corso/carica-allegati).
+  </Step>
+
+  <Step title="Scaricare gli attestati">
+    Ebigen verifica i documenti e genera gli attestati. Cercateli con [Elenco attestati](/api-reference/attestati/elenco-attestati)
+    (per codice fiscale, aula o data) e scaricateli con [Scarica attestato](/api-reference/attestati/scarica-attestato).
+
+    Il primo download di ogni attestato scala dal borsellino l'importo indicato in `price`; i download successivi sono gratuiti.
+    Gli attestati sono scaricabili entro 6 mesi dalla fine del corso.
+  </Step>
+</Steps>
+
+<Tip>
+  Usate sempre `external_id` per corsi e aule: se una chiamata viene ripetuta per errore, Ebigen non crea doppioni
+  e risponde `409` con l'ID già esistente.
+</Tip>

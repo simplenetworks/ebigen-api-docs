@@ -1,0 +1,959 @@
+openapi: 3.1.0
+info:
+  title: Ebigen API
+  version: 1.0.0
+  description: |
+    API di integrazione per le STA (Strutture Tecniche Accreditate) di Ebigen.
+    Permettono di gestire dal proprio gestionale corsi, aule, discenti, fine corso e attestati,
+    con le stesse regole e approvazioni del portale Ebigen.
+
+servers:
+  - url: https://areaprivata.ebigen.org/api/v1
+    description: Produzione
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Account
+    description: Verifica della chiave di accesso e saldo del borsellino.
+  - name: Corsi
+    description: Catalogo corsi della STA. I corsi creati via API vengono validati da Ebigen.
+  - name: Docenti
+    description: Docenti della STA. I docenti creati via API vengono abilitati da Ebigen.
+  - name: Aule
+    description: Edizioni dei corsi (erogazioni) con discenti, aziende e docenti.
+  - name: Fine corso
+    description: Allegati dell'aula e segnalazione di fine corso a Ebigen.
+  - name: Attestati
+    description: Elenco e download degli attestati generati da Ebigen.
+
+paths:
+  /me:
+    get:
+      tags: [Account]
+      summary: Verifica accesso
+      description: |
+        Restituisce la STA collegata alla chiave di accesso e il saldo del borsellino.
+        È la prima chiamata da fare per verificare che la chiave funzioni.
+      operationId: getMe
+      responses:
+        '200':
+          description: STA collegata alla chiave.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sta:
+                    $ref: '#/components/schemas/Sta'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /provision-types:
+    get:
+      tags: [Corsi]
+      summary: Elenco modalità di erogazione
+      description: Valori ammessi per il campo `provision_type` dei corsi.
+      operationId: listProvisionTypes
+      responses:
+        '200':
+          description: Modalità ammesse.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: string }
+              example:
+                data: [Aula, Videoconferenza, Aula/Videoconferenza, Blended, E-learning]
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /courses:
+    get:
+      tags: [Corsi]
+      summary: Elenco corsi
+      description: Corsi della STA, dal più recente. Per creare un'aula serve un corso con stato `abilitato`.
+      operationId: listCourses
+      parameters:
+        - name: status
+          in: query
+          description: Filtra per stato di validazione.
+          schema: { type: string, enum: [in_attesa, abilitato] }
+        - name: external_id
+          in: query
+          description: Filtra per codice del corso nel vostro gestionale.
+          schema: { type: string }
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Elenco paginato dei corsi (50 per pagina di default).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Course' }
+                  links: { $ref: '#/components/schemas/PaginationLinks' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Corsi]
+      summary: Crea corso
+      description: |
+        Crea un corso nel catalogo della STA. Il corso viene creato **non abilitato** e segnalato a Ebigen,
+        che assegna il template attestato e lo abilita. Fino ad allora non è possibile creare aule su quel corso.
+
+        Va inviato come `multipart/form-data` perché richiede almeno un allegato (es. il programma del corso).
+
+        `external_id` è il codice del corso nel vostro gestionale: è obbligatorio e unico per la STA.
+        Se è già stato usato, il corso non viene duplicato e la risposta è `409` con l'ID esistente.
+      operationId: createCourse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [external_id, title, provision_type, duration_minutes, 'attachments[]']
+              properties:
+                external_id:
+                  type: string
+                  maxLength: 191
+                  description: Codice del corso nel vostro gestionale, unico per la STA. Identifica il corso e impedisce i doppioni.
+                  example: CORSO-123
+                title:
+                  type: string
+                  maxLength: 255
+                  example: Formazione generale lavoratori
+                provision_type:
+                  type: string
+                  enum: [Aula, Videoconferenza, Aula/Videoconferenza, Blended, E-learning]
+                  example: Aula
+                duration_minutes:
+                  type: integer
+                  minimum: 60
+                  description: Durata del corso in minuti, minimo 60 (1 ora).
+                  example: 240
+                'final_test[expected_questions]':
+                  type: integer
+                  minimum: 1
+                  description: Numero di domande del test finale. Se c'è il test finale, servono tutti e tre i campi `final_test`.
+                  example: 10
+                'final_test[minimum_correct_answers]':
+                  type: integer
+                  minimum: 0
+                  description: Risposte corrette minime, non superiore al numero di domande.
+                  example: 6
+                'final_test[administration]':
+                  type: string
+                  enum: [Cartaceo, On-line]
+                  example: Cartaceo
+                'attachments[]':
+                  type: array
+                  description: Almeno un file, massimo 20 MB ciascuno.
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Corso creato, in attesa di validazione.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Course' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Esiste già un corso con questo `external_id`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  course_id: { type: integer }
+              example:
+                message: Esiste già un corso con questo external_id.
+                course_id: 142
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /courses/{id}:
+    get:
+      tags: [Corsi]
+      summary: Dettaglio corso
+      operationId: getCourse
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Corso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Course' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /teachers:
+    get:
+      tags: [Docenti]
+      summary: Elenco docenti
+      description: |
+        Docenti della STA. Nelle aule si possono indicare (`teacher_ids`) solo i docenti con `enabled: true`,
+        cioè abilitati da Ebigen.
+      operationId: listTeachers
+      parameters:
+        - name: status
+          in: query
+          description: Filtra per stato di abilitazione.
+          schema: { type: string, enum: [in_attesa, abilitato] }
+      responses:
+        '200':
+          description: Docenti della STA.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Teacher' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Docenti]
+      summary: Crea docente
+      description: |
+        Crea un docente della STA. Il docente viene creato **non abilitato** e segnalato a Ebigen,
+        che lo abilita dopo aver verificato il CV. Solo da quel momento si può indicare nelle aule.
+
+        Va inviato come `multipart/form-data` perché richiede almeno un allegato (il CV).
+        Se il codice fiscale è già presente tra i docenti della STA, il docente non viene duplicato
+        e la risposta è `409` con l'ID esistente.
+      operationId: createTeacher
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, surname, address_region, 'attachments[]']
+              properties:
+                name: { type: string, example: Giuseppe }
+                surname: { type: string, example: Verdi }
+                address_region: { type: string, description: "Regione (es. Emilia Romagna).", example: Emilia Romagna }
+                tax_code: { type: string, maxLength: 16, description: "Codice fiscale: consigliato, evita i doppioni.", example: VRDGPP75A01A944X }
+                role: { type: string, example: Formatore }
+                birth_place: { type: string }
+                birth_date: { type: string, format: date }
+                phone: { type: string }
+                email: { type: string, format: email }
+                fax: { type: string }
+                cv_updated_at: { type: string, format: date, description: "Data di aggiornamento del CV." }
+                address_road: { type: string }
+                address_city: { type: string }
+                address_postcode: { type: string }
+                address_province: { type: string }
+                address_country: { type: string }
+                'attachments[]':
+                  type: array
+                  description: Almeno un file (il CV), massimo 20 MB ciascuno.
+                  items: { type: string, format: binary }
+      responses:
+        '201':
+          description: Docente creato, in attesa di abilitazione.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Teacher' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Esiste già un docente con questo codice fiscale.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  teacher_id: { type: integer }
+              example:
+                message: Esiste già un docente con questo codice fiscale.
+                teacher_id: 51
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /registrations:
+    get:
+      tags: [Aule]
+      summary: Elenco aule
+      description: Aule della STA, dalla più recente.
+      operationId: listRegistrations
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/RegistrationStatus' }
+        - name: course_id
+          in: query
+          schema: { type: integer }
+        - name: external_id
+          in: query
+          description: Codice dell'aula nel vostro gestionale.
+          schema: { type: string }
+        - name: started_from
+          in: query
+          description: Data di inizio dal (AAAA-MM-GG).
+          schema: { type: string, format: date }
+        - name: started_to
+          in: query
+          description: Data di inizio fino al (AAAA-MM-GG).
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Elenco paginato delle aule (20 per pagina di default).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Registration' }
+                  links: { $ref: '#/components/schemas/PaginationLinks' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Aule]
+      summary: Crea aula
+      description: |
+        Crea un'aula (edizione di un corso) con discenti, aziende e docenti in un'unica chiamata.
+        L'aula viene creata nello stato `in_attesa_autorizzazione` e va autorizzata da Ebigen.
+
+        `external_id` è il codice dell'aula nel vostro gestionale: è obbligatorio e unico per la STA.
+        Se inviate due volte la stessa aula, la seconda chiamata non crea un doppione e risponde `409` con l'ID esistente.
+
+        **Regole**
+        - Il corso deve essere `abilitato` e avere un template attestato attivo.
+        - Date di inizio e di fine obbligatorie; per i corsi `Aula`, `Videoconferenza` e `Aula/Videoconferenza` la data di inizio deve essere futura.
+        - Per tutti i corsi tranne `E-learning` serve almeno un docente in `teacher_ids`. Si possono indicare solo
+          docenti già **abilitati** da Ebigen (vedi [Crea docente](/api-reference/docenti/crea-docente)).
+        - Dopo la creazione si possono modificare solo partecipanti e sedi (vedi Modifica aula).
+
+        **Discenti e aziende**
+        - Il discente è riconosciuto dal codice fiscale. Se esiste già nella STA basta indicare il codice fiscale:
+          viene aggiunto all'aula **così com'è**, senza modificarne i dati né l'azienda.
+        - Se il discente è nuovo servono tutti i suoi dati e l'azienda. Per i discenti italiani il codice fiscale
+          viene verificato rispetto a nome, cognome, data e luogo di nascita.
+        - L'azienda è riconosciuta dalla partita IVA (codice fiscale per i privati): se esiste già viene solo collegata,
+          altrimenti viene creata e servono tutti i suoi dati obbligatori.
+
+        L'operazione è **tutto o niente**: se un solo dato non è valido non viene salvato nulla e la risposta `422`
+        indica il campo esatto (es. `learners.2.tax_code`).
+      operationId: createRegistration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegistrationInput' }
+            example:
+              external_id: AULA-2026-001
+              course_id: 46
+              started_at: '2026-11-03'
+              completed_at: '2026-11-10'
+              addresses:
+                - region: Emilia Romagna
+                  city: Bologna
+                  road: Via Roma 1
+                  postcode: '40100'
+                  province: BO
+                  country: Italia
+              teacher_ids: [18]
+              learners:
+                - tax_code: RSSMRA85C15A944F
+                - tax_code: BNCLRA90L62A944D
+                  name: Laura
+                  surname: Bianchi
+                  birth_place: Bologna
+                  birth_date: '1990-07-22'
+                  gender: F
+                  job: Impiegata
+                  ateco_code: '41.20'
+                  country_code: IT
+                  company:
+                    company_type: azienda
+                    vat: '09876543210'
+                    business_name: Azienda Esempio Srl
+                    phone: '0511234567'
+                    email: info@aziendaesempio.it
+                    address_road: Via Esempio 2
+                    address_city: Bologna
+                    address_province: BO
+                    address_postcode: '40100'
+                    address_region: Emilia Romagna
+                    address_country: IT
+                    legal_representative_name: Giulia
+                    legal_representative_surname: Verdi
+      responses:
+        '201':
+          description: Aula creata, in attesa di autorizzazione.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Registration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/RegistrationConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /registrations/{id}:
+    get:
+      tags: [Aule]
+      summary: Dettaglio aula
+      description: Stato, nota di autorizzazione, sedi, docenti e discenti dell'aula, con l'indicazione degli attestati pronti.
+      operationId: getRegistration
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Aula.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Registration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Aule]
+      summary: Modifica aula
+      description: |
+        Dopo la creazione si possono modificare **solo partecipanti e sedi**: inviate soltanto ciò che cambia.
+        Date, corso, collaborazione e docenti non sono modificabili (`422`).
+
+        - `learners`: **sostituisce** i partecipanti con quelli inviati (stesse regole della creazione).
+          Consentito se l'aula è in attesa di autorizzazione e il corso non è ancora al giorno di fine,
+          oppure dal giorno di fine corso in poi.
+          Non si possono togliere discenti con attestato già generato.
+        - `addresses`: **sostituisce** le sedi con quelle inviate. Sempre consentito.
+
+        I discenti non più presenti nell'elenco vengono tolti dall'aula (non cancellati).
+      operationId: updateRegistration
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                learners:
+                  type: array
+                  minItems: 1
+                  items: { $ref: '#/components/schemas/LearnerInput' }
+                addresses:
+                  type: array
+                  minItems: 1
+                  items: { $ref: '#/components/schemas/Address' }
+            example:
+              learners:
+                - tax_code: RSSMRA85C15A944F
+                - tax_code: BNCLRA90L62A944D
+      responses:
+        '200':
+          description: Aula aggiornata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Registration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /registrations/{id}/end:
+    post:
+      tags: [Fine corso]
+      summary: Segnala fine corso
+      description: |
+        Comunica a Ebigen la conclusione del corso: l'aula entra nella coda di controllo per la verifica dei
+        documenti e la generazione degli attestati.
+
+        - Consentito solo **dopo la data di fine corso** indicata alla creazione dell'aula, e solo alla STA principale.
+        - `attachments[]`: i documenti di fine corso (registri, firme, verbali). Consigliato inviarli **in questa stessa
+          chiamata**, così Ebigen trova tutto pronto quando apre l'aula per il controllo.
+      operationId: endRegistration
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                'attachments[]':
+                  type: array
+                  items: { type: string, format: binary }
+      responses:
+        '200':
+          description: Fine corso segnalata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Registration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /registrations/{id}/attachments:
+    post:
+      tags: [Fine corso]
+      summary: Carica allegati
+      description: |
+        Aggiunge allegati all'aula **in un secondo momento**, ad esempio se Ebigen chiede un documento mancante.
+        Normalmente i documenti si inviano insieme a [Segnala fine corso](/api-reference/fine-corso/segnala-fine-corso).
+        I file si aggiungono a quelli già presenti. Consentito solo **dopo la data di fine corso**.
+      operationId: uploadRegistrationAttachments
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: ['attachments[]']
+              properties:
+                'attachments[]':
+                  type: array
+                  description: Almeno un file, massimo 20 MB ciascuno.
+                  items: { type: string, format: binary }
+      responses:
+        '200':
+          description: Aula con l'elenco aggiornato degli allegati.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Registration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /certificates:
+    get:
+      tags: [Attestati]
+      summary: Elenco attestati
+      description: |
+        Attestati generati da Ebigen per le aule della STA. Per ogni attestato sono indicati il prezzo che verrà
+        scalato dal borsellino al primo download (`price`) e la data entro cui è scaricabile (`downloadable_until`).
+      operationId: listCertificates
+      parameters:
+        - name: tax_code
+          in: query
+          description: Codice fiscale del discente.
+          schema: { type: string }
+        - name: registration_id
+          in: query
+          schema: { type: integer }
+        - name: external_id
+          in: query
+          description: Codice dell'aula nel vostro gestionale.
+          schema: { type: string }
+        - name: from
+          in: query
+          description: Data attestato dal (AAAA-MM-GG).
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: Data attestato fino al (AAAA-MM-GG).
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Page'
+      responses:
+        '200':
+          description: Elenco paginato degli attestati (50 per pagina di default).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Certificate' }
+                  links: { $ref: '#/components/schemas/PaginationLinks' }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /certificates/{id}/download:
+    get:
+      tags: [Attestati]
+      summary: Scarica attestato
+      description: |
+        Scarica il PDF dell'attestato.
+
+        - Il **primo download** scala dal borsellino il prezzo indicato in `price`; i successivi sono gratuiti.
+        - Consentito entro **6 mesi** dalla fine del corso.
+        - Riservato alla STA principale.
+      operationId: downloadCertificate
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: PDF dell'attestato (nome file `CF_Nome_Cognome.pdf`).
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402':
+          description: Credito del borsellino insufficiente.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: Non hai abbastanza crediti per scaricare l'attestato.
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410':
+          description: Attestato non più scaricabile (oltre 6 mesi dalla fine del corso).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: Gli attestati non sono più disponibili per il download dopo 6 mesi dalla data di completamento.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Chiave di accesso personale della STA, rilasciata da Ebigen.
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    PerPage:
+      name: per_page
+      in: query
+      description: Elementi per pagina (massimo 100).
+      schema: { type: integer, minimum: 1, maximum: 100 }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1 }
+
+  responses:
+    Unauthorized:
+      description: Chiave di accesso mancante o non valida.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Token non valido. }
+    Forbidden:
+      description: Operazione non consentita per questa STA.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Accesso alle API non abilitato. }
+    NotFound:
+      description: Risorsa inesistente o appartenente ad un'altra STA.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Aula non trovata. }
+    ValidationError:
+      description: Dati non validi. `errors` indica il messaggio per ciascun campo.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+          example:
+            message: Il corso non è ancora stato abilitato da Ebigen.
+            errors:
+              course_id: [Il corso non è ancora stato abilitato da Ebigen.]
+              learners.0.tax_code: [Codice Fiscale inserito non corretto. Dovrebbe essere RSSMRA85C15A944F]
+    RegistrationConflict:
+      description: Esiste già un'aula con questo `external_id`.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              registration_id: { type: integer }
+          example:
+            message: Esiste già un'aula con questo external_id.
+            registration_id: 65
+    TooManyRequests:
+      description: Superato il limite di 60 chiamate al minuto.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+
+    ValidationError:
+      type: object
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+
+    Sta:
+      type: object
+      properties:
+        id: { type: integer, example: 11 }
+        business_name: { type: string, example: STA Emilia Romagna }
+        is_child: { type: boolean, description: "STA secondaria di una STA principale.", example: false }
+        purse_balance: { type: number, description: "Saldo del borsellino.", example: 1271 }
+
+    Course:
+      type: object
+      properties:
+        id: { type: integer, example: 142 }
+        external_id: { type: [string, 'null'], example: CORSO-123 }
+        title: { type: string, example: Formazione generale lavoratori }
+        provision_type: { type: string, example: Aula }
+        duration_minutes: { type: integer, example: 240 }
+        final_test:
+          type: [object, 'null']
+          properties:
+            expected_questions: { type: integer, example: 10 }
+            minimum_correct_answers: { type: integer, example: 6 }
+            administration: { type: [string, 'null'], example: Cartaceo }
+        status:
+          type: string
+          enum: [in_attesa, abilitato]
+          description: Il corso è utilizzabile per le aule solo quando è `abilitato`.
+        certificate_template:
+          type: [object, 'null']
+          description: Template attestato assegnato da Ebigen.
+          properties:
+            name: { type: string }
+            title: { type: string }
+        notes: { type: [string, 'null'], description: "Note di Ebigen." }
+        attachments:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Teacher:
+      type: object
+      properties:
+        id: { type: integer, example: 18 }
+        name: { type: string, example: Giuseppe }
+        surname: { type: string, example: Verdi }
+        role: { type: [string, 'null'], example: Formatore }
+        tax_code: { type: [string, 'null'], example: VRDGPP75A01A944X }
+        enabled: { type: boolean, description: "Abilitato da Ebigen." }
+
+    Address:
+      type: object
+      required: [region, city]
+      properties:
+        region: { type: string, example: Emilia Romagna }
+        city: { type: string, example: Bologna }
+        road: { type: [string, 'null'], example: Via Roma 1 }
+        postcode: { type: [string, 'null'], example: '40100' }
+        province: { type: [string, 'null'], example: BO }
+        country: { type: [string, 'null'], example: Italia }
+
+    RegistrationStatus:
+      type: string
+      enum: [in_attesa_autorizzazione, autorizzata, non_autorizzata]
+
+    Registration:
+      type: object
+      properties:
+        id: { type: integer, example: 65 }
+        external_id: { type: [string, 'null'], example: AULA-2026-001 }
+        course:
+          type: object
+          properties:
+            id: { type: integer }
+            title: { type: string }
+            provision_type: { type: string }
+        status: { $ref: '#/components/schemas/RegistrationStatus' }
+        authorization_date: { type: [string, 'null'], format: date }
+        authorization_note: { type: [string, 'null'], description: "Nota di Ebigen sull'autorizzazione." }
+        started_at: { type: string, format: date }
+        completed_at: { type: [string, 'null'], format: date }
+        collaboration: { type: [string, 'null'] }
+        addresses:
+          type: array
+          items: { $ref: '#/components/schemas/Address' }
+        teachers:
+          type: array
+          items: { $ref: '#/components/schemas/Teacher' }
+        learners:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              tax_code: { type: string }
+              name: { type: string }
+              surname: { type: string }
+              company:
+                type: [object, 'null']
+                properties:
+                  id: { type: integer }
+                  business_name: { type: string }
+                  vat: { type: [string, 'null'] }
+              certificate_available:
+                type: boolean
+                description: L'attestato del discente è stato generato.
+        attachments:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RegistrationInput:
+      type: object
+      required: [external_id, course_id, started_at, completed_at, addresses, learners]
+      properties:
+        external_id:
+          type: string
+          maxLength: 191
+          description: Codice dell'aula nel vostro gestionale, unico per la STA. Identifica l'aula (es. per cercarne gli attestati) e impedisce i doppioni.
+        course_id:
+          type: integer
+          description: Corso abilitato (vedi elenco corsi).
+        started_at:
+          type: string
+          format: date
+          description: Data di inizio. Futura per i corsi Aula/Videoconferenza.
+        completed_at:
+          type: string
+          format: date
+          description: Data di fine, non precedente all'inizio e non modificabile dopo la creazione. È anche la data degli attestati; da quel giorno si possono caricare gli allegati e segnalare la fine corso.
+        collaboration:
+          type: string
+          maxLength: 255
+        addresses:
+          type: array
+          minItems: 1
+          description: Sedi di svolgimento.
+          items: { $ref: '#/components/schemas/Address' }
+        teacher_ids:
+          type: array
+          description: ID di docenti abilitati da Ebigen (vedi elenco docenti). Obbligatorio, con almeno un docente, per i corsi non E-learning.
+          items: { type: integer }
+        learners:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/LearnerInput' }
+
+    LearnerInput:
+      type: object
+      required: [tax_code]
+      description: |
+        Discente già presente nella STA: basta il codice fiscale, viene aggiunto all'aula così com'è.
+        Discente nuovo: sono obbligatori tutti i campi, compresa l'azienda.
+      properties:
+        tax_code: { type: string, description: "Codice fiscale (16 caratteri per i discenti italiani)." }
+        name: { type: string }
+        surname: { type: string }
+        birth_place: { type: string, description: "Per i discenti italiani deve essere un comune italiano." }
+        birth_date: { type: string, format: date }
+        gender: { type: string, enum: [M, F] }
+        job: { type: string, description: "Mansione." }
+        ateco_code: { type: string, description: "Codice ATECO." }
+        country_code: { type: string, maxLength: 5, description: "Nazione (es. IT)." }
+        company: { $ref: '#/components/schemas/CompanyInput' }
+
+    CompanyInput:
+      type: object
+      description: |
+        Azienda del discente. Se esiste già nella STA basta la chiave (`vat` per le aziende, `tax_code` per i privati);
+        altrimenti sono obbligatori anche ragione sociale, contatti, indirizzo e legale rappresentante.
+      required: [company_type]
+      properties:
+        company_type: { type: string, enum: [azienda, privato] }
+        vat: { type: string, description: "Partita IVA (11 cifre). Obbligatoria per le aziende." }
+        tax_code: { type: string, description: "Codice fiscale. Obbligatorio per i privati." }
+        business_name: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email }
+        address_road: { type: string }
+        address_city: { type: string }
+        address_province: { type: string }
+        address_postcode: { type: string }
+        address_region: { type: string }
+        address_country: { type: string, enum: [IT, SM] }
+        legal_representative_name: { type: string }
+        legal_representative_surname: { type: string }
+
+    Certificate:
+      type: object
+      properties:
+        id: { type: integer, description: "ID da usare per il download.", example: 59 }
+        code: { type: [string, 'null'], description: "Codice stampato sull'attestato.", example: 123/08/2026 }
+        certificate_date: { type: string, format: date }
+        registration:
+          type: object
+          properties:
+            id: { type: integer }
+            external_id: { type: [string, 'null'] }
+        course:
+          type: object
+          properties:
+            id: { type: integer }
+            title: { type: string }
+        learner:
+          type: object
+          properties:
+            tax_code: { type: string }
+            name: { type: string }
+            surname: { type: string }
+        downloaded: { type: boolean, description: "Già scaricato (e pagato)." }
+        price: { type: number, description: "Importo scalato al primo download; 0 se già scaricato.", example: 10 }
+        downloadable_until: { type: [string, 'null'], format: date, description: "Ultimo giorno utile per il download." }
+
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: string }
+        last: { type: string }
+        prev: { type: [string, 'null'] }
+        next: { type: [string, 'null'] }
+
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        last_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }

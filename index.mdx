@@ -1,0 +1,47 @@
+---
+title: "Introduzione"
+description: "Integrare il gestionale della STA con il portale Ebigen"
+---
+
+Le API Ebigen permettono alle STA di lavorare dal proprio gestionale senza inserire due volte gli stessi dati sul portale.
+Corsi, aule, discenti e documenti vengono inviati via API; Ebigen li verifica e approva come avviene oggi dal portale,
+e gli attestati si scaricano direttamente dal gestionale.
+
+## Cosa si può fare
+
+<CardGroup cols={2}>
+  <Card title="Corsi" icon="book">
+    Creare i corsi del catalogo e verificarne la validazione da parte di Ebigen.
+  </Card>
+  <Card title="Aule" icon="users">
+    Creare le edizioni dei corsi con discenti, aziende e docenti in un'unica chiamata.
+  </Card>
+  <Card title="Fine corso" icon="flag-checkered">
+    Caricare registri e documenti e segnalare la conclusione del corso.
+  </Card>
+  <Card title="Attestati" icon="file-certificate">
+    Cercare gli attestati generati e scaricarli in PDF.
+  </Card>
+</CardGroup>
+
+## Cosa resta a Ebigen
+
+Le approvazioni restano sul portale Ebigen, con le stesse regole di oggi:
+
+- validazione dei corsi e assegnazione del template attestato;
+- abilitazione dei docenti;
+- autorizzazione delle aule e verifica di fine corso;
+- generazione degli attestati.
+
+## Informazioni generali
+
+| | |
+|---|---|
+| Indirizzo base | `https://areaprivata.ebigen.org/api/v1` |
+| Formato | JSON (`multipart/form-data` per le chiamate con file) |
+| Date | `AAAA-MM-GG`, ad esempio `2026-11-03` |
+| Autenticazione | Chiave personale della STA nell'header `Authorization` |
+
+<Note>
+  Tutte le chiamate vedono solo i dati della STA a cui appartiene la chiave di accesso.
+</Note>

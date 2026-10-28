@@ -1,0 +1,38 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Ebigen API",
+  "description": "API di integrazione per le STA: corsi, aule, discenti, fine corso e attestati.",
+  "colors": {
+    "primary": "#009738",
+    "light": "#03953a",
+    "dark": "#009738"
+  },
+  "logo": {
+    "light": "/images/logo.jpg",
+    "dark": "/images/logo.jpg"
+  },
+  "favicon": "/images/favicon.ico",
+  "api": {
+    "playground": {
+      "proxy": false
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guida",
+        "groups": [
+          {
+            "group": "Per iniziare",
+            "pages": ["index", "autenticazione", "flusso", "errori"]
+          }
+        ]
+      },
+      {
+        "tab": "API",
+        "openapi": "openapi.yaml"
+      }
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+---
+title: "Errori e regole comuni"
+description: "Codici di risposta, formato degli errori e regole valide per tutte le chiamate"
+---
+
+## Codici di risposta
+
+| Codice | Significato |
+|---|---|
+| `200` | Operazione riuscita |
+| `201` | Risorsa creata |
+| `401` | Chiave di accesso mancante o non valida |
+| `402` | Credito del borsellino insufficiente per scaricare l'attestato |
+| `403` | Operazione non consentita per la STA (es. STA secondaria) |
+| `404` | Risorsa inesistente, appartenente a un'altra STA, o endpoint inesistente |
+| `409` | Esiste già una risorsa con lo stesso `external_id` |
+| `410` | Attestato non più scaricabile (oltre 6 mesi dalla fine del corso) |
+| `422` | Dati non validi o operazione non consentita nello stato attuale |
+| `429` | Superato il limite di 60 chiamate al minuto |
+
+## Formato degli errori
+
+Tutti gli errori hanno un campo `message`. Gli errori di validazione (`422`) indicano anche il dettaglio per ogni campo in `errors`;
+per gli elenchi il nome del campo contiene la posizione dell'elemento, a partire da 0:
+
+```json
+{
+  "message": "Codice Fiscale inserito non corretto. Dovrebbe essere RSSMRA85C15A944F",
+  "errors": {
+    "learners.0.tax_code": [
+      "Codice Fiscale inserito non corretto. Dovrebbe essere RSSMRA85C15A944F"
+    ]
+  }
+}
+```
+
+## Regole comuni
+
+**Tutto o niente.** La creazione e la modifica di un'aula vengono salvate solo se tutti i dati sono validi.
+Se anche un solo discente ha un errore non viene salvato nulla: correggete i dati indicati e ripetete la chiamata.
+
+**Codici esterni.** `external_id` è il codice di corsi e aule nel vostro gestionale ed è unico per la STA.
+Permette di ritrovare i dati con i filtri di ricerca e di evitare doppioni.
+
+**Date.** Tutte le date sono nel formato `AAAA-MM-GG`.
+
+**Paginazione.** Gli elenchi sono paginati: usate i parametri `page` e `per_page` (massimo 100) e i campi `links` e `meta` della risposta.
