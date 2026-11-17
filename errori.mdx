@@ -16,7 +16,7 @@ description: "Codici di risposta, formato degli errori e regole valide per tutte
 | `409` | Esiste già una risorsa con lo stesso `external_id` |
 | `410` | Attestato non più scaricabile (oltre 6 mesi dalla fine del corso) |
 | `422` | Dati non validi o operazione non consentita nello stato attuale |
-| `429` | Superato il limite di 60 chiamate al minuto |
+| `429` | Superato il limite di 100 chiamate al minuto per chiave: riprovate dopo i secondi indicati in `Retry-After` |
 
 ## Formato degli errori
 
@@ -40,8 +40,17 @@ per gli elenchi il nome del campo contiene la posizione dell'elemento, a partire
 Se anche un solo discente ha un errore non viene salvato nulla: correggete i dati indicati e ripetete la chiamata.
 
 **Codici esterni.** `external_id` è il codice di corsi e aule nel vostro gestionale ed è unico per la STA.
-Permette di ritrovare i dati con i filtri di ricerca e di evitare doppioni.
+Permette di ritrovare i dati con i filtri di ricerca e di evitare doppioni. Il filtro `external_id` trova i codici che
+**iniziano con** il valore indicato (i caratteri `_` e `%` valgono alla lettera). Con il codice completo possono uscire anche codici più lunghi che iniziano
+allo stesso modo: per il record esatto confrontate `external_id` nella risposta.
 
-**Date.** Tutte le date sono nel formato `AAAA-MM-GG`.
+**Date.** Tutte le date sono nel formato `AAAA-MM-GG` e sono interpretate nell'ora italiana (Europe/Rome).
+I filtri per data esistono in tre forme: `_from` (dal giorno incluso), `_to` (fino al giorno incluso) e `_on` (solo quel giorno),
+ad esempio `updated_from=2026-11-11` oppure `updated_from=2026-11-17&updated_to=2026-11-17`.
 
-**Paginazione.** Gli elenchi sono paginati: usate i parametri `page` e `per_page` (massimo 100) e i campi `links` e `meta` della risposta.
+**Data di modifica.** La data di modifica (`updated_at`) di un'aula cambia quando cambiano i dati dell'aula, lo stato
+o l'autorizzazione; non cambia quando cambiano i discenti o vengono generati gli attestati.
+
+**ID.** Gli ID di corsi e aule sono progressivi: un record creato dopo ha sempre un ID più alto, ma la numerazione può avere dei salti.
+
+**Paginazione.** Gli elenchi sono paginati: usate i parametri `page` e `per_page` (massimo 250) e i campi `links` e `meta` della risposta.

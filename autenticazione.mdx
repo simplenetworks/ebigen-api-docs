@@ -45,4 +45,4 @@ curl https://areaprivata.ebigen.org/api/v1/me \
 |---|---|
 | `401` | Chiave mancante o non valida |
 | `403` | Chiave valida ma accesso alle API non abilitato per la STA |
-| `429` | Superato il limite di **60 chiamate al minuto** |
+| `429` | Superato il limite di **100 chiamate al minuto** per chiave: l'intestazione `Retry-After` indica dopo quanti secondi riprovare |

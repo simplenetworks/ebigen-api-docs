@@ -85,8 +85,15 @@ paths:
           schema: { type: string, enum: [in_attesa, abilitato] }
         - name: external_id
           in: query
-          description: Filtra per codice del corso nel vostro gestionale.
+          description: |
+            Codice del corso nel vostro gestionale: trova i codici che **iniziano con** il valore indicato.
           schema: { type: string }
+        - $ref: '#/components/parameters/CreatedFrom'
+        - $ref: '#/components/parameters/CreatedTo'
+        - $ref: '#/components/parameters/CreatedOn'
+        - $ref: '#/components/parameters/UpdatedFrom'
+        - $ref: '#/components/parameters/UpdatedTo'
+        - $ref: '#/components/parameters/UpdatedOn'
         - $ref: '#/components/parameters/PerPage'
         - $ref: '#/components/parameters/Page'
       responses:
@@ -296,7 +303,11 @@ paths:
     get:
       tags: [Aule]
       summary: Elenco aule
-      description: Aule della STA, dalla più recente.
+      description: |
+        Aule della STA, dalla più recente.
+
+        La data di modifica (`updated_at`) dell'aula cambia quando cambiano i dati dell'aula, lo stato o
+        l'autorizzazione; non cambia quando cambiano i discenti o vengono generati gli attestati.
       operationId: listRegistrations
       parameters:
         - name: status
@@ -307,7 +318,8 @@ paths:
           schema: { type: integer }
         - name: external_id
           in: query
-          description: Codice dell'aula nel vostro gestionale.
+          description: |
+            Codice dell'aula nel vostro gestionale: trova i codici che **iniziano con** il valore indicato.
           schema: { type: string }
         - name: started_from
           in: query
@@ -317,6 +329,12 @@ paths:
           in: query
           description: Data di inizio fino al (AAAA-MM-GG).
           schema: { type: string, format: date }
+        - $ref: '#/components/parameters/CreatedFrom'
+        - $ref: '#/components/parameters/CreatedTo'
+        - $ref: '#/components/parameters/CreatedOn'
+        - $ref: '#/components/parameters/UpdatedFrom'
+        - $ref: '#/components/parameters/UpdatedTo'
+        - $ref: '#/components/parameters/UpdatedOn'
         - $ref: '#/components/parameters/PerPage'
         - $ref: '#/components/parameters/Page'
       responses:
@@ -578,7 +596,8 @@ paths:
           schema: { type: integer }
         - name: external_id
           in: query
-          description: Codice dell'aula nel vostro gestionale.
+          description: |
+            Codice dell'aula nel vostro gestionale: trova i codici che **iniziano con** il valore indicato.
           schema: { type: string }
         - name: from
           in: query
@@ -643,6 +662,50 @@ paths:
               example:
                 message: Gli attestati non sono più disponibili per il download dopo 6 mesi dalla data di completamento.
 
+  /registrations/{id}/certificates/download:
+    get:
+      tags: [Attestati]
+      summary: Scarica tutti gli attestati di un'aula
+      description: |
+        Scarica in un unico file zip tutti gli attestati generati dell'aula, come il download multiplo del portale.
+
+        - Al **primo download** scala dal borsellino il prezzo di tutti gli attestati non ancora scaricati
+          (tutto o niente: se il credito non basta non viene scalato nulla). Gli attestati già scaricati sono gratuiti.
+        - Consentito entro **6 mesi** dalla fine del corso.
+        - Riservato alla STA principale.
+      operationId: downloadRegistrationCertificates
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Zip `attestati.zip` con un PDF per discente (nome file `CF_Nome_Cognome.pdf`).
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402':
+          description: Credito del borsellino insufficiente, oppure aula annullata.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: Non hai abbastanza crediti per scaricare gli attestati.
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: Aula inesistente o senza attestati generati.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: Nessun attestato disponibile per questa aula.
+        '410':
+          description: Attestati non più scaricabili (oltre 6 mesi dalla fine del corso).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: Gli attestati non sono più disponibili per il download dopo 6 mesi dalla data di completamento.
+
 components:
   securitySchemes:
     bearerAuth:
@@ -659,8 +722,38 @@ components:
     PerPage:
       name: per_page
       in: query
-      description: Elementi per pagina (massimo 100).
-      schema: { type: integer, minimum: 1, maximum: 100 }
+      description: Elementi per pagina (massimo 250).
+      schema: { type: integer, minimum: 1, maximum: 250 }
+    CreatedFrom:
+      name: created_from
+      in: query
+      description: Creati dal (AAAA-MM-GG, ora italiana, giorno incluso).
+      schema: { type: string, format: date }
+    CreatedTo:
+      name: created_to
+      in: query
+      description: Creati fino al (AAAA-MM-GG, ora italiana, giorno incluso).
+      schema: { type: string, format: date }
+    CreatedOn:
+      name: created_on
+      in: query
+      description: Creati nel giorno indicato (AAAA-MM-GG, ora italiana).
+      schema: { type: string, format: date }
+    UpdatedFrom:
+      name: updated_from
+      in: query
+      description: Modificati dal (AAAA-MM-GG, ora italiana, giorno incluso).
+      schema: { type: string, format: date }
+    UpdatedTo:
+      name: updated_to
+      in: query
+      description: Modificati fino al (AAAA-MM-GG, ora italiana, giorno incluso).
+      schema: { type: string, format: date }
+    UpdatedOn:
+      name: updated_on
+      in: query
+      description: Modificati nel giorno indicato (AAAA-MM-GG, ora italiana).
+      schema: { type: string, format: date }
     Page:
       name: page
       in: query
@@ -708,7 +801,17 @@ components:
             message: Esiste già un'aula con questo external_id.
             registration_id: 65
     TooManyRequests:
-      description: Superato il limite di 60 chiamate al minuto.
+      description: |
+        Superato il limite di 100 chiamate al minuto per chiave. L'intestazione `Retry-After` indica dopo
+        quanti secondi riprovare; `X-RateLimit-Limit` e `X-RateLimit-Remaining` sono presenti in ogni risposta.
+      headers:
+        Retry-After:
+          description: Secondi da attendere prima di riprovare.
+          schema: { type: integer }
+        X-RateLimit-Limit:
+          schema: { type: integer }
+        X-RateLimit-Remaining:
+          schema: { type: integer }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
