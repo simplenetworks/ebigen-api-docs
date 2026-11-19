@@ -304,12 +304,18 @@ paths:
       tags: [Aule]
       summary: Elenco aule
       description: |
-        Aule della STA, dalla più recente.
+        Aule della STA, dalla più recente. Come nel portale, l'elenco comprende anche le aule nel cestino
+        (campo `deleted`); per escluderle usate `deleted=0`.
 
         La data di modifica (`updated_at`) dell'aula cambia quando cambiano i dati dell'aula, lo stato o
-        l'autorizzazione; non cambia quando cambiano i discenti o vengono generati gli attestati.
+        l'autorizzazione, e quando l'aula viene spostata nel cestino o ripristinata; non cambia quando cambiano
+        i discenti o vengono generati gli attestati.
       operationId: listRegistrations
       parameters:
+        - name: deleted
+          in: query
+          description: "`1` solo le aule nel cestino, `0` solo le aule attive. Senza filtro: tutte."
+          schema: { type: string, enum: ['0', '1'] }
         - name: status
           in: query
           schema: { $ref: '#/components/schemas/RegistrationStatus' }
@@ -440,7 +446,9 @@ paths:
     get:
       tags: [Aule]
       summary: Dettaglio aula
-      description: Stato, nota di autorizzazione, sedi, docenti e discenti dell'aula, con l'indicazione degli attestati pronti.
+      description: |
+        Stato, nota di autorizzazione, sedi, docenti e discenti dell'aula, con l'indicazione degli attestati pronti.
+        Restituisce anche le aule nel cestino (campo `deleted`).
       operationId: getRegistration
       parameters:
         - $ref: '#/components/parameters/Id'
@@ -503,6 +511,74 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Aule]
+      summary: Cestina o elimina aula
+      description: |
+        Come i pulsanti "Cancella" ed "Elimina" del portale.
+
+        - **Senza `force`**: sposta l'aula nel cestino. L'aula resta salvata e visibile negli elenchi con
+          `deleted: true`, può essere ripristinata e il suo `external_id` resta occupato.
+        - **Con `force=1`**: elimina definitivamente un'aula **già nel cestino**. L'operazione non è reversibile:
+          l'aula non viene più restituita e il suo `external_id` torna libero.
+        - In entrambi i casi è consentito solo se **nessun discente ha un attestato generato**.
+      operationId: deleteRegistration
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: force
+          in: query
+          description: "`1` per l'eliminazione definitiva di un'aula già nel cestino."
+          schema: { type: string, enum: ['0', '1'] }
+      responses:
+        '200':
+          description: |
+            Senza `force`: aula spostata nel cestino (restituita con `deleted: true`).
+            Con `force=1`: `{ "message": "Aula eliminata definitivamente." }`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Registration' }
+                  - $ref: '#/components/schemas/Error'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: |
+            Aula con attestati già generati; senza `force`, aula già nel cestino; con `force=1`, aula non ancora nel cestino.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: Non è possibile cestinare un'aula con attestati già generati.
+
+  /registrations/{id}/restore:
+    post:
+      tags: [Aule]
+      summary: Ripristina aula
+      description: Ripristina un'aula dal cestino, come il pulsante "Ripristina" del portale.
+      operationId: restoreRegistration
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Aula ripristinata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Registration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: L'aula non è nel cestino.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                message: L'aula non è nel cestino.
 
   /registrations/{id}/end:
     post:
@@ -908,6 +984,12 @@ components:
             title: { type: string }
             provision_type: { type: string }
         status: { $ref: '#/components/schemas/RegistrationStatus' }
+        deleted:
+          type: boolean
+          description: |
+            L'aula è nel cestino del portale (può essere ripristinata). Le aule eliminate definitivamente
+            non vengono più restituite.
+        deleted_at: { type: [string, 'null'], format: date-time, description: Data di spostamento nel cestino. }
         authorization_date: { type: [string, 'null'], format: date }
         authorization_note: { type: [string, 'null'], description: "Nota di Ebigen sull'autorizzazione." }
         started_at: { type: string, format: date }
@@ -928,6 +1010,8 @@ components:
               tax_code: { type: string }
               name: { type: string }
               surname: { type: string }
+              birth_place: { type: [string, 'null'] }
+              birth_date: { type: [string, 'null'], format: date }
               company:
                 type: [object, 'null']
                 properties:

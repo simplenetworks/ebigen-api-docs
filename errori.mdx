@@ -49,7 +49,14 @@ I filtri per data esistono in tre forme: `_from` (dal giorno incluso), `_to` (fi
 ad esempio `updated_from=2026-11-11` oppure `updated_from=2026-11-17&updated_to=2026-11-17`.
 
 **Data di modifica.** La data di modifica (`updated_at`) di un'aula cambia quando cambiano i dati dell'aula, lo stato
-o l'autorizzazione; non cambia quando cambiano i discenti o vengono generati gli attestati.
+o l'autorizzazione, e quando l'aula viene spostata nel cestino o ripristinata; non cambia quando cambiano i discenti
+o vengono generati gli attestati.
+
+**Aule nel cestino.** Come nel portale, l'elenco e il dettaglio delle aule comprendono anche le aule nel cestino
+(campo `deleted`). Come nel portale, un'aula senza attestati generati si può spostare nel cestino ed eliminare
+definitivamente con [Cestina o elimina aula](/api-reference/aule/cestina-o-elimina-aula), e ripristinare con
+[Ripristina aula](/api-reference/aule/ripristina-aula). Un'aula nel cestino mantiene il suo `external_id`, che non può
+essere riusato; le aule eliminate definitivamente non vengono più restituite e il loro `external_id` torna libero.
 
 **ID.** Gli ID di corsi e aule sono progressivi: un record creato dopo ha sempre un ID più alto, ma la numerazione può avere dei salti.
 
