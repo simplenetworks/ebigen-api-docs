@@ -22,8 +22,8 @@ description: "Dal corso all'attestato, passo per passo"
     Inviate con [Crea aula](/api-reference/aule/crea-aula) l'edizione del corso con date di inizio e fine, sede,
     docenti abilitati (`teacher_ids`) e discenti.
 
-    - **Discenti**: riconosciuti dal codice fiscale. Se esistono già nella STA basta il codice fiscale e vengono
-      aggiunti così come sono; quelli nuovi vengono creati con i loro dati.
+    - **Discenti**: riconosciuti dal codice fiscale. Se esistono già nella STA basta il codice fiscale; se inviate
+      anche azienda, mansione o codice ATECO, questi vengono aggiornati come nel portale. Quelli nuovi vengono creati con i loro dati.
     - **Aziende**: riconosciute dalla partita IVA. Se esistono già vengono collegate, altrimenti vengono create.
 
     L'aula viene creata **in attesa di autorizzazione**. In seguito si possono modificare solo partecipanti e sedi,

@@ -376,8 +376,10 @@ paths:
         - Dopo la creazione si possono modificare solo partecipanti e sedi (vedi Modifica aula).
 
         **Discenti e aziende**
-        - Il discente è riconosciuto dal codice fiscale. Se esiste già nella STA basta indicare il codice fiscale:
-          viene aggiunto all'aula **così com'è**, senza modificarne i dati né l'azienda.
+        - Il discente è riconosciuto dal codice fiscale. Se esiste già nella STA basta indicare il codice fiscale.
+          Come nel portale, se inviate anche `company`, `job` o `ateco_code` questi dati vengono **aggiornati**
+          (l'azienda precedente resta nello storico del discente); gli altri dati anagrafici restano quelli già salvati.
+          Gli attestati già generati non cambiano: i nuovi dati valgono per gli attestati generati da quel momento.
         - Se il discente è nuovo servono tutti i suoi dati e l'azienda. Per i discenti italiani il codice fiscale
           viene verificato rispetto a nome, cognome, data e luogo di nascita.
         - L'azienda è riconosciuta dalla partita IVA (codice fiscale per i privati): se esiste già viene solo collegata,
@@ -1067,7 +1069,8 @@ components:
       type: object
       required: [tax_code]
       description: |
-        Discente già presente nella STA: basta il codice fiscale, viene aggiunto all'aula così com'è.
+        Discente già presente nella STA: basta il codice fiscale. Se inviati, `company`, `job` e `ateco_code`
+        vengono aggiornati; gli altri dati anagrafici sono ignorati.
         Discente nuovo: sono obbligatori tutti i campi, compresa l'azienda.
       properties:
         tax_code: { type: string, description: "Codice fiscale (16 caratteri per i discenti italiani)." }
