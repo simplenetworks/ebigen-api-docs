@@ -470,7 +470,7 @@ paths:
       summary: Modifica aula
       description: |
         Dopo la creazione si possono modificare **solo partecipanti e sedi**: inviate soltanto ciò che cambia.
-        Date, corso, collaborazione e docenti non sono modificabili (`422`).
+        Date, corso, collaborazione, finanziato da, codice corso e docenti non sono modificabili (`422`).
 
         - `learners`: **sostituisce** i partecipanti con quelli inviati (stesse regole della creazione).
           Consentito se l'aula è in attesa di autorizzazione e il corso non è ancora al giorno di fine,
@@ -997,6 +997,8 @@ components:
         started_at: { type: string, format: date }
         completed_at: { type: [string, 'null'], format: date }
         collaboration: { type: [string, 'null'] }
+        funded_by: { type: [string, 'null'], description: "Finanziato da: se compilato compare sull'attestato." }
+        course_code: { type: [string, 'null'], description: "Codice corso: se compilato compare sull'attestato." }
         addresses:
           type: array
           items: { $ref: '#/components/schemas/Address' }
@@ -1051,6 +1053,14 @@ components:
         collaboration:
           type: string
           maxLength: 255
+        funded_by:
+          type: string
+          maxLength: 255
+          description: Finanziato da (es. il fondo che finanzia il corso). Se compilato compare in fondo all'attestato, sopra il codice archivio. Non modificabile dopo la creazione.
+        course_code:
+          type: string
+          maxLength: 255
+          description: Codice corso. Se compilato compare in fondo all'attestato, sopra il codice archivio. Non modificabile dopo la creazione.
         addresses:
           type: array
           minItems: 1
